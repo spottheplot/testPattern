@@ -84,7 +84,7 @@ public class PaintView extends SurfaceView implements SurfaceHolder.Callback {
             }
             break;
         }
-        return false;
+        return true;
     }
 
     @Override

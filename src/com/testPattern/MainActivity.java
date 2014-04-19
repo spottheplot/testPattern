@@ -30,11 +30,38 @@ import android.view.WindowManager;
 import android.widget.Button;
 import android.os.Build;
 
+
+//TODO: Remove the activity part from this class and let it be as an static method class to get the device parameters and touch events
+/**
+ * This class provides methods to obtain the devices parameters
+ * @author juan
+ *
+ */
 public class MainActivity extends Activity {
-	String touchEventPath; // Path to the input stream of the touch device /dev/input/eventx
+	String touchEventPath = new String(); // Path to the input stream of the touch device /dev/input/eventx
 	String touchDescriptor = "4e2720e99bd2b59adae8529881343531fff7c98e"; // Descriptor obtained from the MotionEvent created by the touch device. 
 	String getTouchParamCmd = "dumpsys input" + "\n";
 	String getTouchEventCmd = "getevent -l " + touchEventPath + "| grep PO" + "\n";
+	
+	String deviceName = new String();
+	String deviceClass = new String();
+	String devicePath = new String();
+	String deviceDescriptor = new String();
+	float xScale;
+	float yScale;
+	
+	// getevent output labels
+	final String ABS_MT_TRACKING_ID = "0039";
+	final String ABS_MT_POSITION_X = "0035";
+	final String ABS_MT_POSITION_Y = "0036";
+	final String ABS_MT_PRESSURE = "003a";
+	final String SYN_REPORT = "0000";
+//	final String ABS_MT_ORIENTATION  = "0034";
+//	final String ABS_SLOT = "002f";
+	
+	// ABS_MT_TRACKING_ID value when a touch event ends
+	final String TOUCH_END = "ffffffff";
+	
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -73,90 +100,103 @@ public class MainActivity extends Activity {
 		    outputStream.writeBytes("dumpsys input\n");
 		    outputStream.flush();
 
-			String tempString = new String();
-			String tempDevice = new String();
-			String tempClass = new String();
-			String tempPath = new String();
-			String tempDescriptor = new String();
-			float xScale;
-			float yScale;
-			
+		    String tempString = new String();
 	
-			StringBuilder test = new StringBuilder();
+//			StringBuilder test = new StringBuilder();
 			while ((tempString = paramInputStream.readLine()) != null) {
 				// Search for given Descriptor:
 				if (tempString.matches("    .:.*") ) {
 //					test.append(tempString);
-					tempDevice = tempString.substring(4);
-//					paramInputStream.mark(8192); // 8192 is default BufferedReader buffer size.
-					tempClass = getParam("Classes", paramInputStream);
-					if (tempClass.equals("0x00000015") || tempClass.equals("0x00000014")) {
-						tempPath = getParam ("Path", paramInputStream);
-						tempDescriptor = getParam ("Descriptor", paramInputStream);
-						if (tempDescriptor.equals(touchDescriptor)) {
-							// This is the device we are looking for, so we search for its parameters
+					deviceName = tempString.substring(4);
+					deviceClass = getParam("Classes", paramInputStream);
+					if (deviceClass.equals("0x00000015") || deviceClass.equals("0x00000014")) {
+						devicePath = getParam ("Path", paramInputStream);
+						deviceDescriptor = getParam ("Descriptor", paramInputStream);
+						// This is the device we are looking for, so we search for the relationship between the touch sensor resolution and the pixel resolution
+						if (deviceDescriptor.equals(touchDescriptor)) {
+							touchEventPath = devicePath;
 							while ((tempString = paramInputStream.readLine()) != null) {
-								if (tempString.contains(tempDevice)) {
+								if (tempString.contains(deviceName)) {
+									// Touch sensor report * x/yScale = Pixel scale touch location.
 									xScale = Float.valueOf(getParam("XScale", paramInputStream));
 									yScale = Float.valueOf(getParam("YScale", paramInputStream));
+									outputStream.close();
+									paramInputStream.close();
 									break;	
 								}
 							}
 						}
 					}
 				}
-				outputStream.close();
-				paramInputStream.close();
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
 			// TODO: handle exception
 		} 
 		
-	
-		
-		
-		
-		
-		
-//		// Get touchscreen device parameters
-//		try {
-//			byte[] buffer = new byte[8];
-//			Process touchWCProcess = Runtime.getRuntime().exec(getTouchParamCmd + "|wc -m");
-//			
-//			while (touchWCProcess.getInputStream().read(buffer) != -1);
-//			Process touchParamProcess = Runtime.getRuntime().exec("echo 'hola");
-//			BufferedReader paramInputStream = new BufferedReader (new InputStreamReader(touchParamProcess.getInputStream()));
-//
-//			String tempString = new String();
-//	
-//			StringBuilder test = new StringBuilder();
-//			while ((tempString = paramInputStream.readLine()) != null) {
-//				
-//			}					
-//		} catch (Exception e) {
-//			e.printStackTrace();
-//			// TODO: handle exception
-//		} 
-		
-//		// Start raw touch screen coordinates input stream
-//		new Thread (new Runnable() {
-//			@Override
-//			public void run() {
+		//TODO: Implement an alternative when device parameters can't be parsed from dumpsys input
+				
+		// Start raw touch screen coordinates input stream
+		new Thread (new Runnable() {
+			@Override
+			public void run() {
+				try {
+					Process su = Runtime.getRuntime().exec("su");
+					DataOutputStream outputStream = new DataOutputStream(su.getOutputStream());
+					BufferedReader touchInputStream = new BufferedReader (new InputStreamReader(su.getInputStream()));
+					outputStream.writeBytes("getevent " + devicePath + "\n");
+					outputStream.flush();
+
+					String tempString = new String();
+					int xTouch = 0;
+					int yTouch = 0;
+					int pressure; 
+
+					while ((tempString = touchInputStream.readLine()) != null) {
+						String[] splitCommand = tempString.split(" ");
+						// if a Touch event is started...
+						if (splitCommand[1].equals(ABS_MT_TRACKING_ID.intern())
+								&& !splitCommand[2].equals(TOUCH_END.intern())) {
+							// We will read all the reports given until it ends
+							while (!(splitCommand = touchInputStream.readLine().split(" "))[2]
+									.equals(TOUCH_END.intern())) {
+								// We parse the content of the reports
+								switch (splitCommand[1]) {
+								case ABS_MT_POSITION_X:
+									xTouch = Integer.valueOf(splitCommand[2], 16);
+									break;
+								case ABS_MT_POSITION_Y:
+									yTouch = Integer.valueOf(splitCommand[2], 16);
+									break;
+								case SYN_REPORT:
+									break;
+								default:
+									break;
+								}
+							}
+						}
+					}
+				} catch (Exception e) {
+					e.printStackTrace();
+					// TODO: handle exception
+				} 
+
+				
+// ORIGINAL IDEA
 //				StringBuilder touchLog = new StringBuilder();
 //				byte[] touchByte = new byte[7];
 //				BufferedInputStream touchInputStream;
-//				
 //				try {
-//					Process touchEventProcess = Runtime.getRuntime().exec(getTouchEventCmd);
+//					Process touchEventProcess = Runtime.getRuntime().exec("getevent -l " + tempPath + "| grep PO" + "\n");
 //					touchInputStream = new BufferedInputStream (touchEventProcess.getInputStream());
-//					while (touchInputStream.read(touchByte) != -1) {
+//					while (true) {
+//						touchInputStream.read(touchByte);
 //					}
 //				} catch (Exception e) {
 //					// TODO: handle exception
 //				} 		
-//			}
-//		}).start();
+			}
+		}).start();
 	}
 
 //	@Override
