@@ -14,6 +14,7 @@ import android.app.Activity;
 import android.app.ActionBar;
 import android.app.Fragment;
 import android.content.DialogInterface;
+import android.graphics.Point;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.view.InputDevice;
@@ -51,16 +52,24 @@ public class MainActivity extends Activity {
 	float yScale;
 	
 	// getevent output labels
-	final String ABS_MT_TRACKING_ID = "0039";
-	final String ABS_MT_POSITION_X = "0035";
-	final String ABS_MT_POSITION_Y = "0036";
-	final String ABS_MT_PRESSURE = "003a";
-	final String SYN_REPORT = "0000";
+//	final String ABS_MT_TRACKING_ID = "0039";
+//	final String ABS_MT_POSITION_X = "0035";
+//	final String ABS_MT_POSITION_Y = "0036";
+//	final String ABS_MT_PRESSURE = "003a";
+//	final String SYN_REPORT = "0000";
 //	final String ABS_MT_ORIENTATION  = "0034";
 //	final String ABS_SLOT = "002f";
 	
+	// getevent output byte labels
+	final byte ABS_MT_TRACKING_ID = 0x39;
+	final byte ABS_MT_POSITION_X = 0x35;
+	final byte ABS_MT_POSITION_Y = 0x36;
+	final byte ABS_MT_PRESSURE = 0x3a;
+	final byte SYN_REPORT = 0x00;
+	
 	// ABS_MT_TRACKING_ID value when a touch event ends
-	final String TOUCH_END = "ffffffff";
+//	final String TOUCH_END = "ffffffff";
+	final byte TOUCH_END = (byte)0xff;
 	
 
 	@Override
@@ -143,33 +152,41 @@ public class MainActivity extends Activity {
 				try {
 					Process su = Runtime.getRuntime().exec("su");
 					DataOutputStream outputStream = new DataOutputStream(su.getOutputStream());
-					BufferedReader touchInputStream = new BufferedReader (new InputStreamReader(su.getInputStream()));
-					outputStream.writeBytes("getevent " + devicePath + "\n");
+					BufferedInputStream touchInputStream = new BufferedInputStream(su.getInputStream());
+					outputStream.writeBytes("cat " + devicePath + "\n");
 					outputStream.flush();
 
-					String tempString = new String();
+//					String tempString = new String();
 					int xTouch = 0;
 					int yTouch = 0;
-					int pressure; 
-
-					while ((tempString = touchInputStream.readLine()) != null) {
-						String[] splitCommand = tempString.split(" ");
-						// if a Touch event is started...
-						if (splitCommand[1].equals(ABS_MT_TRACKING_ID.intern())
-								&& !splitCommand[2].equals(TOUCH_END.intern())) {
-							// We will read all the reports given until it ends
-							while (!(splitCommand = touchInputStream.readLine().split(" "))[2]
-									.equals(TOUCH_END.intern())) {
-								// We parse the content of the reports
-								switch (splitCommand[1]) {
+					Point lastPoint = new Point();
+//					int pressure = 0; 
+					
+					byte[] bBuffer = new byte[4];
+					while (touchInputStream.skip(10) != 0 
+							&& touchInputStream.read(bBuffer) != -1
+							&& touchInputStream.skip(2) != 0) {
+						if (bBuffer[0] == ABS_MT_TRACKING_ID
+								&& bBuffer[2] != TOUCH_END
+								&& bBuffer[3] != TOUCH_END) {
+							while (touchInputStream.skip(10) != 0 
+									&& touchInputStream.read(bBuffer) != -1
+									&& touchInputStream.skip(2) != 0
+									&& bBuffer[2] != TOUCH_END
+									&& bBuffer[3] != TOUCH_END) {
+								switch (bBuffer[0]) {
 								case ABS_MT_POSITION_X:
-									xTouch = Integer.valueOf(splitCommand[2], 16);
+									xTouch = (bBuffer[3] << 8 & 0xFF00 | bBuffer[2] & 0xFF);
 									break;
+									
 								case ABS_MT_POSITION_Y:
-									yTouch = Integer.valueOf(splitCommand[2], 16);
+									yTouch = bBuffer[3] << 8 | bBuffer[2] & 0xFF;
 									break;
+									
 								case SYN_REPORT:
+									lastPoint = new Point(xTouch, yTouch);
 									break;
+
 								default:
 									break;
 								}
