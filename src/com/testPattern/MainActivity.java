@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.util.ArrayList;
 
 import com.example.testbubble.R;
 
@@ -35,7 +36,7 @@ import android.os.Build;
 //TODO: Remove the activity part from this class and let it be as an static method class to get the device parameters and touch events
 /**
  * This class provides methods to obtain the devices parameters
- * @author juan
+ * @author Juan Herrero Macias
  *
  */
 public class MainActivity extends Activity {
@@ -70,6 +71,9 @@ public class MainActivity extends Activity {
 	// ABS_MT_TRACKING_ID value when a touch event ends
 //	final String TOUCH_END = "ffffffff";
 	final byte TOUCH_END = (byte)0xff;
+	
+	// Touch event Point variables
+	ArrayList<Point> pointList = new ArrayList<Point>();
 	
 
 	@Override
@@ -141,10 +145,12 @@ public class MainActivity extends Activity {
 		} catch (Exception e) {
 			e.printStackTrace();
 			// TODO: handle exception
+			//TODO: Implement an alternative when device parameters can't be parsed from dumpsys input
 		} 
 		
-		//TODO: Implement an alternative when device parameters can't be parsed from dumpsys input
-				
+		/**
+		 * This thread will parse the output bytes of the input devices directly from linux kernel		
+		 */
 		// Start raw touch screen coordinates input stream
 		new Thread (new Runnable() {
 			@Override
@@ -159,7 +165,7 @@ public class MainActivity extends Activity {
 //					String tempString = new String();
 					int xTouch = 0;
 					int yTouch = 0;
-					Point lastPoint = new Point();
+					boolean isNewPoint = false;
 //					int pressure = 0; 
 					
 					byte[] bBuffer = new byte[4];
@@ -176,15 +182,21 @@ public class MainActivity extends Activity {
 									&& bBuffer[3] != TOUCH_END) {
 								switch (bBuffer[0]) {
 								case ABS_MT_POSITION_X:
+									// First or last 8 bits are masked to avoid values over 0x80 being casted to negative int
 									xTouch = (bBuffer[3] << 8 & 0xFF00 | bBuffer[2] & 0xFF);
+									isNewPoint = true;
 									break;
 									
 								case ABS_MT_POSITION_Y:
 									yTouch = bBuffer[3] << 8 | bBuffer[2] & 0xFF;
+									isNewPoint = true;
 									break;
 									
 								case SYN_REPORT:
-									lastPoint = new Point(xTouch, yTouch);
+									if (isNewPoint) {
+										pointList.add(new Point(xTouch, yTouch));
+										isNewPoint = false;
+									}
 									break;
 
 								default:
@@ -196,24 +208,61 @@ public class MainActivity extends Activity {
 				} catch (Exception e) {
 					e.printStackTrace();
 					// TODO: handle exception
-				} 
-
-				
-// ORIGINAL IDEA
-//				StringBuilder touchLog = new StringBuilder();
-//				byte[] touchByte = new byte[7];
-//				BufferedInputStream touchInputStream;
-//				try {
-//					Process touchEventProcess = Runtime.getRuntime().exec("getevent -l " + tempPath + "| grep PO" + "\n");
-//					touchInputStream = new BufferedInputStream (touchEventProcess.getInputStream());
-//					while (true) {
-//						touchInputStream.read(touchByte);
-//					}
-//				} catch (Exception e) {
-//					// TODO: handle exception
-//				} 		
+				} 	
 			}
 		}).start();
+	}
+	
+	/**
+	 * Gets 
+	 * @return First Point in the touch Points array list
+	 */
+	public Point getNextTouch() {
+		Point returnPoint = null;
+		if (pointList.size() > 0) { 
+			returnPoint = pointList.get(0);
+			pointList.remove(0);
+			//TODO: If pointList gets too big, we should consider trimming it
+			// pointList.trimToSize();
+		}
+		return returnPoint;
+	}
+	
+	public Point[] getRemainingTouchPoints() {
+		Point[] tempPoints =  null;
+		int size;
+		if ((size = pointList.size()) > 0) {
+			tempPoints = pointList.toArray(new Point[size]);
+			for (int i = 0; i < size; i++) {
+				pointList.remove(0);
+			}
+			//TODO: If pointList gets too big, we should consider trimming it
+			//	pointList.trimToSize();
+		}
+		return tempPoints;
+	}
+			
+	/**
+	 * Finds the next line in the provided inputStream beginning with parameter value and returns its content.
+	 * This method is written for parsing the output of $dumpsys input command
+	 * @param parameter
+	 * @param inputStream Input stream associated with the output of $dumpsys input
+	 * @return
+	 */
+	private String getParam(String parameter, BufferedReader inputStream) {
+		String tempString;
+		String returnString = new String();
+		try {
+			while ((tempString = inputStream.readLine().trim()) != null) {
+				if (tempString.startsWith(parameter) == true) {
+					returnString = tempString.substring((parameter + ": ").length()); 
+					break;
+				}
+			}			
+		} catch (Exception e) {
+			// TODO: handle exception
+		}
+		return returnString;
 	}
 
 //	@Override
@@ -242,28 +291,5 @@ public class MainActivity extends Activity {
 			return true;
 		}
 		return super.onOptionsItemSelected(item);
-	}
-	
-	/**
-	 * Finds the next line in the provided inputStream beginning with parameter value and returns its content.
-	 * This method is written for parsing the output of $dumpsys input command
-	 * @param parameter
-	 * @param inputStream Input stream associated with the output of $dumpsys input
-	 * @return
-	 */
-	private String getParam(String parameter, BufferedReader inputStream) {
-		String tempString;
-		String returnString = new String();
-		try {
-			while ((tempString = inputStream.readLine().trim()) != null) {
-				if (tempString.startsWith(parameter) == true) {
-					returnString = tempString.substring((parameter + ": ").length()); 
-					break;
-				}
-			}			
-		} catch (Exception e) {
-			// TODO: handle exception
-		}
-		return returnString;
 	}
 }

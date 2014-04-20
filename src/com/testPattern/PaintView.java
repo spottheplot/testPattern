@@ -2,6 +2,7 @@ package com.testPattern;
 
 import com.testPattern.PatternParameters.Patterns;
 
+import android.app.Activity;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -71,7 +72,11 @@ public class PaintView extends SurfaceView implements SurfaceHolder.Callback {
                 doDrawLine(testCanvas, touch, lastTouch);
                 lastTouch.x = touch.x;
                 lastTouch.y = touch.y;
+                // Code for testing touch event parsing
+                //      MainActivity a = (MainActivity) getContext();
+                //		Point[] tPoints = a.getRemainingTouchPoints();
                 Log.v("Coordinate", "Cooldinates are" + touch.x + " , " + touch.y); 
+                
             }
             break;
 
@@ -80,6 +85,7 @@ public class PaintView extends SurfaceView implements SurfaceHolder.Callback {
                 doDrawCircle(testCanvas, touch, tolerance / 2);
                 lastTouch.x = touch.x;
                 lastTouch.y = touch.y;
+
                 Log.v("Coordinate", "Cooldinates are" + touch.x + " , " + touch.y);
             }
             break;

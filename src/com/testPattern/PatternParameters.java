@@ -64,7 +64,6 @@ public class PatternParameters {
      */
     private Point[] getDefaultPattern(int density) {
         // Variable initialization
-        Point[] pattern;
         ArrayList<Point> pointList = new ArrayList<Point>();
         int[] x = new int[density + 2];
         int [] y = new int[density + 2];
@@ -89,13 +88,8 @@ public class PatternParameters {
         pointList.add(new Point(x[density + 1], y[density + 1]));
         pointList.add(new Point(0, 0));
         pointList.add(new Point(0, y[density + 1]));
-        Object[] patternPointList = pointList.toArray();
-        pattern = new Point[patternPointList.length];
-        for (int i = 0; i < patternPointList.length; i++) {
-			pattern[i] = (Point) patternPointList[i];
-			
-		}
-        return pattern;
+
+        return pointList.toArray(new Point[pointList.size()]);
     }
     
     private Point [] getDefaultPattern() {
